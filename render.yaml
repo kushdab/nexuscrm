@@ -25,7 +25,7 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         value: https://nexuscrm-web.onrender.com
-    plan: starter
+    plan: free
 
   # Frontend
   - type: web
@@ -41,7 +41,7 @@ services:
           type: web
           property: host
           transform: https://{value}
-    plan: starter
+    plan: free
 
   # Celery Worker
   - type: worker
@@ -60,16 +60,16 @@ services:
           name: nexuscrm-redis
           type: redis
           property: connectionString
-    plan: starter
+    plan: free
 
-  # Redis — must be a service, not a database
+  # Redis
   - type: redis
     name: nexuscrm-redis
-    plan: starter
+    plan: free
     ipAllowList: []
 
 databases:
   - name: nexuscrm-db
-    plan: starter
+    plan: free
     databaseName: nexuscrm
     user: nexus
