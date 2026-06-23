@@ -29,6 +29,14 @@ async def health():
 # ── routers ───────────────────────────────────────────────────────────────────
 from app.routes.auth import router as auth_router
 from app.routes.billing import router as billing_router
+from app.routes.contacts import router as contacts_router
+from app.routes.deals import router as deals_router
+from app.routes.orgs import router as orgs_router
+from app.routes.seed import router as seed_router
 
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(billing_router, prefix="/api/v1")
+app.include_router(auth_router,     prefix="/api/v1")
+app.include_router(billing_router,  prefix="/api/v1")
+app.include_router(contacts_router, prefix="/api/v1")
+app.include_router(deals_router,    prefix="/api/v1")
+app.include_router(orgs_router,     prefix="/api/v1")
+app.include_router(seed_router,     prefix="/api/v1")
