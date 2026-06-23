@@ -11,17 +11,17 @@ export default function Home() {
         </p>
         <div className="flex gap-4 justify-center">
           <Link
-            href="/dashboard"
+            href="/register"
             className="px-8 py-3 bg-blue-500 hover:bg-blue-400 rounded-lg font-semibold transition-colors"
           >
-            Open Dashboard
+            Get Started
           </Link>
-          <a
-            href={`${process.env.NEXT_PUBLIC_API_URL || ''}/api/docs`}
+          <Link
+            href="/login"
             className="px-8 py-3 border border-blue-400 hover:bg-blue-800 rounded-lg font-semibold transition-colors"
           >
-            API Docs
-          </a>
+            Sign In
+          </Link>
         </div>
       </div>
       <footer className="mt-16 text-blue-400 text-sm">
