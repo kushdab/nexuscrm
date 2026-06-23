@@ -62,12 +62,14 @@ services:
           property: connectionString
     plan: starter
 
+  # Redis — must be a service, not a database
+  - type: redis
+    name: nexuscrm-redis
+    plan: starter
+    ipAllowList: []
+
 databases:
   - name: nexuscrm-db
     plan: starter
     databaseName: nexuscrm
     user: nexus
-
-  - name: nexuscrm-redis
-    type: redis
-    plan: starter
