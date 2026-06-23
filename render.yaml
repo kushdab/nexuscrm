@@ -5,7 +5,8 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -43,26 +44,7 @@ services:
           transform: https://{value}
     plan: free
 
-  # Celery Worker
-  - type: worker
-    name: nexuscrm-worker
-    runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: celery -A app.workers.celery_app worker --loglevel=info
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: nexuscrm-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: nexuscrm-redis
-          type: redis
-          property: connectionString
-    plan: free
-
-  # Redis
+  # Redis (Key Value store)
   - type: redis
     name: nexuscrm-redis
     plan: free
@@ -73,3 +55,24 @@ databases:
     plan: free
     databaseName: nexuscrm
     user: nexus
+
+# Note: Background workers (Celery) require a paid Render plan.
+# To enable, uncomment the block below and upgrade to the Starter plan ($7/mo per service):
+#
+#  - type: worker
+#    name: nexuscrm-worker
+#    runtime: python
+#    rootDir: backend
+#    buildCommand: pip install -r requirements.txt
+#    startCommand: celery -A app.workers.celery_app worker --loglevel=info
+#    envVars:
+#      - key: DATABASE_URL
+#        fromDatabase:
+#          name: nexuscrm-db
+#          property: connectionString
+#      - key: REDIS_URL
+#        fromService:
+#          name: nexuscrm-redis
+#          type: redis
+#          property: connectionString
+#    plan: starter
