@@ -6,6 +6,9 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts'
 
+import dynamic from 'next/dynamic'
+const ClientWorldMap = dynamic(() => import('@/components/ClientWorldMap'), { ssr: false })
+
 const API = process.env.NEXT_PUBLIC_API_URL || ''
 
 interface Contact { id: string; stage: string; created_at: string }
