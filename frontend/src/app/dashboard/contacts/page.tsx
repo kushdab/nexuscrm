@@ -1,299 +1,230 @@
 'use client'
-import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || ''
-const PAGE_SIZE = 15
+const STAGES = ['', 'lead', 'prospect', 'qualified', 'proposal', 'negotiation', 'customer', 'churned']
+const PER_PAGE = 12
 
 interface Contact {
   id: string; first_name: string; last_name: string
-  email: string; phone: string; company: string; title: string; stage: string
+  email: string; company: string; title: string; stage: string; phone: string
 }
 
-const STAGES = ['lead','prospect','qualified','proposal','negotiation','customer','closed_won','closed_lost','churned']
-
-const STAGE_COLOR: Record<string, string> = {
+const BADGE: Record<string,string> = {
   lead:'bg-blue-100 text-blue-700', prospect:'bg-slate-100 text-slate-600',
   qualified:'bg-yellow-100 text-yellow-700', proposal:'bg-orange-100 text-orange-700',
-  negotiation:'bg-purple-100 text-purple-700', customer:'bg-teal-100 text-teal-700',
-  closed_won:'bg-green-100 text-green-700', closed_lost:'bg-red-100 text-red-700',
-  churned:'bg-gray-100 text-gray-600',
+  negotiation:'bg-purple-100 text-purple-700', customer:'bg-green-100 text-green-700',
+  churned:'bg-red-100 text-red-700',
 }
 
-type SortKey = 'name' | 'company' | 'stage' | 'email'
-type SortDir = 'asc' | 'desc'
-
-const BLANK = { first_name:'', last_name:'', email:'', phone:'', company:'', title:'', stage:'lead' }
-
 export default function ContactsPage() {
-  const router = useRouter()
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState('')
+  const [contacts, setContacts]   = useState<Contact[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [search, setSearch]       = useState('')
+  const [stage, setStage]         = useState('')
+  const [sortField, setSortField] = useState('first_name')
+  const [sortDir, setSortDir]     = useState<'asc'|'desc'>('asc')
+  const [page, setPage]           = useState(1)
+  const [total, setTotal]         = useState(0)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [form, setForm]           = useState({ first_name:'', last_name:'', email:'', company:'', title:'', phone:'', stage:'lead' })
+  const [saving, setSaving]       = useState(false)
 
-  // Filters
-  const [query, setQuery]       = useState('')
-  const [stageFilter, setStageFilter] = useState('')
-  const [sortKey, setSortKey]   = useState<SortKey>('name')
-  const [sortDir, setSortDir]   = useState<SortDir>('asc')
-  const [page, setPage]         = useState(1)
-
-  // Add contact modal
-  const [showAdd, setShowAdd]   = useState(false)
-  const [form, setForm]         = useState(BLANK)
-  const [saving, setSaving]     = useState(false)
-  const [formErr, setFormErr]   = useState('')
-
-  const token = useCallback(() => localStorage.getItem('crm_token'), [])
-
-  const loadContacts = useCallback(async () => {
-    const t = token()
-    if (!t) { router.push('/login'); return }
+  const load = useCallback(async () => {
+    const token = localStorage.getItem('crm_token')
+    if (!token) return
     setLoading(true)
-    try {
-      const res = await fetch(`${API}/api/v1/contacts?limit=200`, { headers: { Authorization: `Bearer ${t}` }})
-      if (res.status === 401) { localStorage.removeItem('crm_token'); router.push('/login'); return }
-      const data = await res.json()
-      setContacts(data.items || [])
-    } catch { setError('Failed to load contacts') }
-    finally { setLoading(false) }
-  }, [router, token])
-
-  useEffect(() => { loadContacts() }, [loadContacts])
-
-  // Client-side filter + sort
-  const filtered = useMemo(() => {
-    let list = [...contacts]
-    if (stageFilter) list = list.filter(c => c.stage === stageFilter)
-    if (query.trim()) {
-      const q = query.toLowerCase()
-      list = list.filter(c =>
-        `${c.first_name} ${c.last_name}`.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.company?.toLowerCase().includes(q) ||
-        c.title?.toLowerCase().includes(q)
-      )
-    }
-    list.sort((a, b) => {
-      let va = '', vb = ''
-      if (sortKey === 'name')    { va = `${a.first_name} ${a.last_name}`; vb = `${b.first_name} ${b.last_name}` }
-      if (sortKey === 'company') { va = a.company || ''; vb = b.company || '' }
-      if (sortKey === 'stage')   { va = a.stage || '';   vb = b.stage || '' }
-      if (sortKey === 'email')   { va = a.email || '';   vb = b.email || '' }
-      return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+    const params = new URLSearchParams({
+      limit: String(PER_PAGE), offset: String((page-1)*PER_PAGE),
+      ...(search && { search }), ...(stage && { stage }),
+      sort_by: sortField, sort_dir: sortDir,
     })
-    return list
-  }, [contacts, query, stageFilter, sortKey, sortDir])
+    const r = await fetch(`${API}/api/v1/contacts?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (r.ok) { const d = await r.json(); setContacts(d.items||[]); setTotal(d.total||0) }
+    setLoading(false)
+  }, [page, search, stage, sortField, sortDir])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  useEffect(() => { load() }, [load])
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
-    setPage(1)
+  function toggleSort(f: string) {
+    if (sortField === f) setSortDir(d => d==='asc'?'desc':'asc')
+    else { setSortField(f); setSortDir('asc') }
+  }
+  function SortIcon({ f }: { f: string }) {
+    if (sortField !== f) return <span className="ml-1 text-slate-300">↕</span>
+    return <span className="ml-1">{sortDir==='asc'?'↑':'↓'}</span>
   }
 
-  function SortIcon({ k }: { k: SortKey }) {
-    if (sortKey !== k) return <span className="ml-1 text-slate-300">↕</span>
-    return <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  async function addContact(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true)
+    const token = localStorage.getItem('crm_token')!
+    const r = await fetch(`${API}/api/v1/contacts`, {
+      method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(form),
+    })
+    if (r.ok) { setShowAdd(false); setForm({ first_name:'',last_name:'',email:'',company:'',title:'',phone:'',stage:'lead' }); load() }
+    setSaving(false)
   }
 
-  async function addContact() {
-    const t = token(); if (!t) return
-    setSaving(true); setFormErr('')
-    try {
-      const res = await fetch(`${API}/api/v1/contacts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
-        body: JSON.stringify(form),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.detail || 'Failed to create contact')
-      }
-      setShowAdd(false); setForm(BLANK); loadContacts()
-    } catch (e: unknown) { setFormErr(e instanceof Error ? e.message : 'Error') }
-    finally { setSaving(false) }
-  }
+  const pages = Math.ceil(total / PER_PAGE)
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-800">Contacts</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{filtered.length} of {contacts.length} contacts</p>
+          <h1 className="text-2xl font-bold text-slate-900">Contacts</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{total.toLocaleString()} total</p>
         </div>
         <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
-          </svg>
-          Add Contact
+          className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+          + Add Contact
         </button>
       </div>
 
-      {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>}
-
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[220px]">
-          <svg className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
-          </svg>
-          <input
-            type="text" placeholder="Search name, email, company…"
-            value={query} onChange={e => { setQuery(e.target.value); setPage(1) }}
-            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Stage filter */}
-        <select value={stageFilter} onChange={e => { setStageFilter(e.target.value); setPage(1) }}
-          className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <input value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}}
+          placeholder="Search name, email, company…"
+          className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <select value={stage} onChange={e=>{setStage(e.target.value);setPage(1)}}
+          className="sm:w-48 border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Stages</option>
-          {STAGES.map(s => <option key={s} value={s}>{s.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+          {STAGES.filter(s=>s).map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
         </select>
-
-        {/* Clear filters */}
-        {(query || stageFilter) && (
-          <button onClick={() => { setQuery(''); setStageFilter(''); setPage(1) }}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-            Clear filters
-          </button>
-        )}
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-slate-400 text-sm">Loading contacts…</div>
-        ) : paginated.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-sm">
-            {contacts.length === 0 ? 'No contacts yet. Click "Add Contact" to create one.' : 'No contacts match your filters.'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-                <tr>
-                  {([['name','Name'],['company','Company'],['email','Email'],['stage','Stage']] as [SortKey, string][]).map(([k, label]) => (
-                    <th key={k} onClick={() => toggleSort(k)}
-                      className="px-4 py-3 text-left cursor-pointer select-none hover:text-slate-700">
-                      {label}<SortIcon k={k} />
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-left">Title</th>
-                  <th className="px-4 py-3 text-left">Phone</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginated.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
-                      {c.first_name} {c.last_name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{c.company || '—'}</td>
-                    <td className="px-4 py-3 text-slate-500">{c.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STAGE_COLOR[c.stage] || 'bg-slate-100 text-slate-600'}`}>
-                        {c.stage}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{c.title || '—'}</td>
-                    <td className="px-4 py-3 text-slate-500">{c.phone || '—'}</td>
-                  </tr>
+      {/* Table — desktop */}
+      <div className="hidden sm:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+              <tr>
+                {[['first_name','Name'],['company','Company'],['email','Email'],['title','Title'],['stage','Stage']].map(([f,l])=>(
+                  <th key={f} onClick={()=>toggleSort(f)}
+                    className="px-5 py-3.5 text-left cursor-pointer hover:text-slate-700 select-none whitespace-nowrap">
+                    {l}<SortIcon f={f}/>
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                <th className="px-5 py-3.5 text-left">Phone</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-400">Loading…</td></tr>
+              ) : contacts.length===0 ? (
+                <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-400">No contacts found.</td></tr>
+              ) : contacts.map(c=>(
+                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-5 py-4 font-semibold text-slate-800">{c.first_name} {c.last_name}</td>
+                  <td className="px-5 py-4 text-slate-500">{c.company}</td>
+                  <td className="px-5 py-4 text-slate-500">{c.email}</td>
+                  <td className="px-5 py-4 text-slate-500">{c.title}</td>
+                  <td className="px-5 py-4">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${BADGE[c.stage]||'bg-slate-100 text-slate-600'}`}>
+                      {c.stage}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-slate-500">{c.phone||'—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        {/* Pagination */}
-        {!loading && totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
-            <p className="text-xs text-slate-500">
-              Showing {((page-1)*PAGE_SIZE)+1}–{Math.min(page*PAGE_SIZE, filtered.length)} of {filtered.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page === 1}
-                className="px-3 py-1.5 text-xs border border-slate-300 rounded-md disabled:opacity-40 hover:bg-slate-50 transition-colors">
-                ← Prev
-              </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                const p = totalPages <= 7 ? i + 1 : page <= 4 ? i + 1 : page + i - 3
-                if (p < 1 || p > totalPages) return null
-                return (
-                  <button key={p} onClick={() => setPage(p)}
-                    className={`px-3 py-1.5 text-xs border rounded-md transition-colors ${
-                      p === page ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-300 hover:bg-slate-50'
-                    }`}>
-                    {p}
-                  </button>
-                )
-              })}
-              <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page === totalPages}
-                className="px-3 py-1.5 text-xs border border-slate-300 rounded-md disabled:opacity-40 hover:bg-slate-50 transition-colors">
-                Next →
-              </button>
+      {/* Cards — mobile */}
+      <div className="sm:hidden space-y-3">
+        {loading ? (
+          <div className="text-center py-10 text-slate-400">Loading…</div>
+        ) : contacts.length===0 ? (
+          <div className="text-center py-10 text-slate-400">No contacts found.</div>
+        ) : contacts.map(c=>(
+          <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-slate-900">{c.first_name} {c.last_name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{c.title}{c.company?` · ${c.company}`:''}</p>
+              </div>
+              <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${BADGE[c.stage]||'bg-slate-100 text-slate-600'}`}>
+                {c.stage}
+              </span>
+            </div>
+            <div className="mt-3 space-y-1 text-xs text-slate-500">
+              {c.email && <p>✉ {c.email}</p>}
+              {c.phone && <p>📞 {c.phone}</p>}
             </div>
           </div>
-        )}
+        ))}
       </div>
+
+      {/* Pagination */}
+      {pages > 1 && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">
+            Showing {Math.min((page-1)*PER_PAGE+1, total)}–{Math.min(page*PER_PAGE, total)} of {total}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {Array.from({length:Math.min(pages,7)},(_,i)=>{
+              const p = pages<=7 ? i+1 : i===0?1:i===6?pages:page-3+i
+              return (
+                <button key={i} onClick={()=>setPage(p)}
+                  className={`w-9 h-9 text-sm rounded-xl font-medium transition-colors ${p===page?'bg-blue-600 text-white shadow-md':'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>
+                  {p}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add Contact Modal */}
       {showAdd && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">Add Contact</h3>
-              <button onClick={() => { setShowAdd(false); setForm(BLANK); setFormErr('') }}
-                className="text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
+          <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-3xl sm:rounded-t-2xl">
+              <h2 className="text-lg font-bold text-slate-900">New Contact</h2>
+              <button onClick={()=>setShowAdd(false)} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
             </div>
-            <div className="p-6 space-y-4">
-              {formErr && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{formErr}</div>}
+            <form onSubmit={addContact} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                {([['first_name','First name'],['last_name','Last name']] as [keyof typeof form, string][]).map(([f, label]) => (
+                {[['first_name','First Name'],['last_name','Last Name']].map(([f,l])=>(
                   <div key={f}>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-                    <input type="text" value={form[f]}
-                      onChange={e => setForm(x => ({ ...x, [f]: e.target.value }))}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">{l}</label>
+                    <input required value={form[f as keyof typeof form]}
+                      onChange={e=>setForm(x=>({...x,[f]:e.target.value}))}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 ))}
               </div>
-              {([['email','Email','email'],['phone','Phone','tel'],['company','Company','text'],['title','Job title','text']] as [keyof typeof form, string, string][]).map(([f, label, type]) => (
+              {[['email','Email','email'],['company','Company','text'],['title','Job Title','text'],['phone','Phone','tel']].map(([f,l,t])=>(
                 <div key={f}>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-                  <input type={type} value={form[f]}
-                    onChange={e => setForm(x => ({ ...x, [f]: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">{l}</label>
+                  <input type={t} value={form[f as keyof typeof form]}
+                    onChange={e=>setForm(x=>({...x,[f]:e.target.value}))}
+                    required={f==='email'}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               ))}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Stage</label>
-                <select value={form.stage} onChange={e => setForm(x => ({ ...x, stage: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                  {STAGES.map(s => <option key={s} value={s}>{s.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Stage</label>
+                <select value={form.stage} onChange={e=>setForm(x=>({...x,stage:e.target.value}))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {STAGES.filter(s=>s).map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
                 </select>
               </div>
-            </div>
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
-              <button onClick={() => { setShowAdd(false); setForm(BLANK); setFormErr('') }}
-                className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-                Cancel
-              </button>
-              <button onClick={addContact} disabled={saving || !form.first_name || !form.last_name || !form.email}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors">
-                {saving ? 'Saving…' : 'Add Contact'}
-              </button>
-            </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={()=>setShowAdd(false)}
+                  className="flex-1 py-2.5 text-sm font-semibold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving}
+                  className="flex-1 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl transition-colors">
+                  {saving ? 'Saving…' : 'Add Contact'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
