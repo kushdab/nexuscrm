@@ -22,7 +22,8 @@
     "zustand": "^4.5.2",
     "react-simple-maps": "^3.0.0",
     "d3-zoom": "^3.0.0",
-    "d3-selection": "^3.0.0"
+    "d3-selection": "^3.0.0",
+    "us-atlas": "^3.0.1"
   },
   "devDependencies": {
     "@types/node": "^20",
