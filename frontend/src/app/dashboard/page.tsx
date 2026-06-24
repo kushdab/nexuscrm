@@ -149,6 +149,11 @@ export default function Overview() {
         <Kpi label="Avg Deal Size"    value={fmt(avgDeal)}    sub={`Revenue ${fmt(revenue)}`}          color="#f97316" />
       </div>
 
+      {/* World Map */}
+      <div className="mb-6">
+        <ClientWorldMap />
+      </div>
+
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Bar chart — 6-month pipeline */}
