@@ -30,6 +30,7 @@ export default function MarketingPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const router = useRouter()
   const [tab, setTab] = useState<'campaigns'|'automation'|'segments'|'scoring'>('campaigns')
   const [contacts, setContacts] = useState<any[]>([])
 
