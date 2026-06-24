@@ -7,7 +7,8 @@ const PER_PAGE = 12
 
 interface Customer {
   id: string; first_name: string; last_name: string
-  email: string; company: string; title: string; stage: string; phone: string
+  email: string; company: string; title: string; stage: string
+  phone: string; state: string; country: string
 }
 
 const BADGE: Record<string, string> = {
@@ -17,23 +18,24 @@ const BADGE: Record<string, string> = {
   churned:'bg-red-100 text-red-700',
 }
 
-const EMPTY_FORM = { first_name:'', last_name:'', email:'', company:'', title:'', phone:'', stage:'lead' }
+const EMPTY = { first_name:'', last_name:'', email:'', company:'', title:'', phone:'', stage:'lead', state:'', country:'' }
 
-function Field({ label, value, onChange, required, type='text', options }:{
-  label:string; value:string; onChange:(v:string)=>void;
-  required?:boolean; type?:string; options?:string[]
+function Field({ label, value, onChange, required, type='text', options, half }:{
+  label:string; value:string; onChange:(v:string)=>void
+  required?:boolean; type?:string; options?:string[]; half?:boolean
 }) {
+  const cls = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
   return (
-    <div>
-      <label className="block text-xs font-semibold text-slate-600 mb-1">{label}{required && <span className="text-red-400 ml-0.5">*</span>}</label>
+    <div className={half ? '' : ''}>
+      <label className="block text-xs font-semibold text-slate-600 mb-1">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
       {options ? (
-        <select value={value} onChange={e=>onChange(e.target.value)}
-          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 capitalize">
-          {options.map(o=><option key={o} value={o} className="capitalize">{o.charAt(0).toUpperCase()+o.slice(1)||'—'}</option>)}
+        <select value={value} onChange={e=>onChange(e.target.value)} className={cls + ' bg-white capitalize'}>
+          {options.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)||'—'}</option>)}
         </select>
       ) : (
-        <input type={type} value={value} required={required} onChange={e=>onChange(e.target.value)}
-          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <input type={type} value={value} required={required} onChange={e=>onChange(e.target.value)} className={cls} />
       )}
     </div>
   )
@@ -49,15 +51,13 @@ export default function CustomersPage() {
   const [page, setPage]           = useState(1)
   const [total, setTotal]         = useState(0)
 
-  // Add modal
   const [showAdd, setShowAdd]     = useState(false)
-  const [addForm, setAddForm]     = useState({ ...EMPTY_FORM })
+  const [addForm, setAddForm]     = useState({ ...EMPTY })
   const [addSaving, setAddSaving] = useState(false)
 
-  // Edit drawer
-  const [editing, setEditing]     = useState<Customer | null>(null)
-  const [editForm, setEditForm]   = useState({ ...EMPTY_FORM })
-  const [editSaving, setEditSaving] = useState(false)
+  const [editing, setEditing]           = useState<Customer | null>(null)
+  const [editForm, setEditForm]         = useState({ ...EMPTY })
+  const [editSaving, setEditSaving]     = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const load = useCallback(async () => {
@@ -85,7 +85,6 @@ export default function CustomersPage() {
     return <span className="ml-1">{sortDir==='asc'?'↑':'↓'}</span>
   }
 
-  // ── Add customer ────────────────────────────────────────────────────────
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault(); setAddSaving(true)
     const token = localStorage.getItem('crm_token')!
@@ -93,39 +92,33 @@ export default function CustomersPage() {
       method:'POST', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
       body: JSON.stringify(addForm),
     })
-    if (r.ok) { setShowAdd(false); setAddForm({ ...EMPTY_FORM }); load() }
+    if (r.ok) { setShowAdd(false); setAddForm({ ...EMPTY }); load() }
     setAddSaving(false)
   }
 
-  // ── Open edit drawer ────────────────────────────────────────────────────
   function openEdit(c: Customer) {
     setEditing(c)
-    setEditForm({ first_name:c.first_name, last_name:c.last_name, email:c.email,
-      company:c.company||'', title:c.title||'', phone:c.phone||'', stage:c.stage||'lead' })
+    setEditForm({ first_name:c.first_name||'', last_name:c.last_name||'', email:c.email||'',
+      company:c.company||'', title:c.title||'', phone:c.phone||'', stage:c.stage||'lead',
+      state:c.state||'', country:c.country||'' })
     setDeleteConfirm(false)
   }
 
-  // ── Save edit ───────────────────────────────────────────────────────────
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault(); setEditSaving(true)
     const token = localStorage.getItem('crm_token')!
-    const r = await fetch(`${API}/api/v1/contacts/${editing!.id}`, {
+    let r = await fetch(`${API}/api/v1/contacts/${editing!.id}`, {
       method:'PATCH', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
       body: JSON.stringify(editForm),
     })
+    if (!r.ok) r = await fetch(`${API}/api/v1/contacts/${editing!.id}`, {
+      method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(editForm),
+    })
     if (r.ok) { setEditing(null); load() }
-    else {
-      // Fallback to PUT if PATCH not supported
-      const r2 = await fetch(`${API}/api/v1/contacts/${editing!.id}`, {
-        method:'PUT', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' },
-        body: JSON.stringify(editForm),
-      })
-      if (r2.ok) { setEditing(null); load() }
-    }
     setEditSaving(false)
   }
 
-  // ── Delete customer ─────────────────────────────────────────────────────
   async function handleDelete() {
     const token = localStorage.getItem('crm_token')!
     const r = await fetch(`${API}/api/v1/contacts/${editing!.id}`, {
@@ -136,6 +129,31 @@ export default function CustomersPage() {
   }
 
   const pages = Math.ceil(total / PER_PAGE)
+
+  const FormFields = ({ form, set }: { form: typeof EMPTY; set: (fn:(x:typeof EMPTY)=>typeof EMPTY)=>void }) => (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="First Name" value={form.first_name} required onChange={v=>set(x=>({...x,first_name:v}))} />
+        <Field label="Last Name"  value={form.last_name}  required onChange={v=>set(x=>({...x,last_name:v}))} />
+      </div>
+      <Field label="Email"     type="email" value={form.email}   required onChange={v=>set(x=>({...x,email:v}))} />
+      <Field label="Phone"     type="tel"   value={form.phone}            onChange={v=>set(x=>({...x,phone:v}))} />
+      <Field label="Company"               value={form.company}           onChange={v=>set(x=>({...x,company:v}))} />
+      <Field label="Job Title"             value={form.title}             onChange={v=>set(x=>({...x,title:v}))} />
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="State / Province" value={form.state}   onChange={v=>set(x=>({...x,state:v}))}
+          />
+        <Field label="Country"          value={form.country} onChange={v=>set(x=>({...x,country:v}))}
+          />
+      </div>
+      <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600 flex items-start gap-2">
+        <span className="text-base leading-none">📍</span>
+        <span>State &amp; Country are used to plot this customer on the world map in the dashboard.</span>
+      </div>
+      <Field label="Stage" value={form.stage} onChange={v=>set(x=>({...x,stage:v}))}
+        options={STAGES.filter(s=>s)} />
+    </>
+  )
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -170,13 +188,14 @@ export default function CustomersPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
               <tr>
-                {[['first_name','Name'],['company','Company'],['email','Email'],['title','Title'],['stage','Stage']].map(([f,l])=>(
+                {[['first_name','Name'],['company','Company'],['email','Email'],['stage','Stage']].map(([f,l])=>(
                   <th key={f} onClick={()=>toggleSort(f)}
                     className="px-5 py-3.5 text-left cursor-pointer hover:text-slate-700 select-none whitespace-nowrap">
                     {l}<SortIcon f={f}/>
                   </th>
                 ))}
                 <th className="px-5 py-3.5 text-left">Phone</th>
+                <th className="px-5 py-3.5 text-left">Location</th>
                 <th className="px-5 py-3.5 text-left text-blue-400">Edit</th>
               </tr>
             </thead>
@@ -198,13 +217,20 @@ export default function CustomersPage() {
                   </td>
                   <td className="px-5 py-4 text-slate-500">{c.company||'—'}</td>
                   <td className="px-5 py-4 text-slate-500">{c.email}</td>
-                  <td className="px-5 py-4 text-slate-500">{c.title||'—'}</td>
                   <td className="px-5 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize ${BADGE[c.stage]||'bg-slate-100 text-slate-600'}`}>
                       {c.stage}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-slate-500">{c.phone||'—'}</td>
+                  <td className="px-5 py-4 text-slate-500 text-xs">
+                    {(c.state||c.country) ? (
+                      <span className="flex items-center gap-1">
+                        <span>📍</span>
+                        <span>{[c.state, c.country].filter(Boolean).join(', ')}</span>
+                      </span>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-5 py-4">
                     <span className="text-blue-400 group-hover:text-blue-600 text-lg transition-colors">✎</span>
                   </td>
@@ -234,16 +260,14 @@ export default function CustomersPage() {
                   <p className="text-xs text-slate-500 mt-0.5">{c.title}{c.company?` · ${c.company}`:''}</p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${BADGE[c.stage]||'bg-slate-100 text-slate-600'}`}>
-                  {c.stage}
-                </span>
-                <span className="text-blue-400 text-xs">Tap to edit ✎</span>
-              </div>
+              <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${BADGE[c.stage]||'bg-slate-100 text-slate-600'}`}>
+                {c.stage}
+              </span>
             </div>
             <div className="mt-3 space-y-1 text-xs text-slate-500">
               {c.email && <p>✉ {c.email}</p>}
               {c.phone && <p>📞 {c.phone}</p>}
+              {(c.state||c.country) && <p>📍 {[c.state,c.country].filter(Boolean).join(', ')}</p>}
             </div>
           </div>
         ))}
@@ -269,7 +293,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* ── Add Customer Modal ───────────────────────────────────────────── */}
+      {/* ── Add Modal ───────────────────────────────────────────────────── */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
           <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -278,16 +302,7 @@ export default function CustomersPage() {
               <button onClick={()=>setShowAdd(false)} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
             </div>
             <form onSubmit={handleAdd} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="First Name" value={addForm.first_name} required onChange={v=>setAddForm(x=>({...x,first_name:v}))} />
-                <Field label="Last Name"  value={addForm.last_name}  required onChange={v=>setAddForm(x=>({...x,last_name:v}))} />
-              </div>
-              <Field label="Email"   type="email" value={addForm.email}   required onChange={v=>setAddForm(x=>({...x,email:v}))} />
-              <Field label="Phone"   type="tel"   value={addForm.phone}            onChange={v=>setAddForm(x=>({...x,phone:v}))} />
-              <Field label="Company"             value={addForm.company}           onChange={v=>setAddForm(x=>({...x,company:v}))} />
-              <Field label="Job Title"           value={addForm.title}             onChange={v=>setAddForm(x=>({...x,title:v}))} />
-              <Field label="Stage" value={addForm.stage} onChange={v=>setAddForm(x=>({...x,stage:v}))}
-                options={STAGES.filter(s=>s)} />
+              <FormFields form={addForm} set={setAddForm as any} />
               <button type="submit" disabled={addSaving}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors">
                 {addSaving ? 'Saving…' : 'Add Customer'}
@@ -297,15 +312,13 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* ── Edit Customer Drawer ─────────────────────────────────────────── */}
+      {/* ── Edit Drawer ──────────────────────────────────────────────────── */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-end bg-black/40"
           onClick={e=>{ if(e.target===e.currentTarget){ setEditing(null); setDeleteConfirm(false) }}}>
-          <div className="bg-white w-full sm:w-[420px] sm:h-full rounded-t-3xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-full overflow-hidden"
+          <div className="bg-white w-full sm:w-[440px] sm:h-full rounded-t-3xl sm:rounded-none shadow-2xl flex flex-col max-h-[92vh] sm:max-h-full overflow-hidden"
             onClick={e=>e.stopPropagation()}>
-
-            {/* Drawer header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
                   {editing.first_name?.[0]}{editing.last_name?.[0]}
@@ -318,28 +331,13 @@ export default function CustomersPage() {
               <button onClick={()=>{ setEditing(null); setDeleteConfirm(false) }}
                 className="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
             </div>
-
-            {/* Form */}
             <form onSubmit={handleEditSave} className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="First Name" value={editForm.first_name} required onChange={v=>setEditForm(x=>({...x,first_name:v}))} />
-                <Field label="Last Name"  value={editForm.last_name}  required onChange={v=>setEditForm(x=>({...x,last_name:v}))} />
-              </div>
-              <Field label="Email"     type="email" value={editForm.email}   required onChange={v=>setEditForm(x=>({...x,email:v}))} />
-              <Field label="Phone"     type="tel"   value={editForm.phone}            onChange={v=>setEditForm(x=>({...x,phone:v}))} />
-              <Field label="Company"               value={editForm.company}           onChange={v=>setEditForm(x=>({...x,company:v}))} />
-              <Field label="Job Title"             value={editForm.title}             onChange={v=>setEditForm(x=>({...x,title:v}))} />
-              <Field label="Stage" value={editForm.stage} onChange={v=>setEditForm(x=>({...x,stage:v}))}
-                options={STAGES.filter(s=>s)} />
-
-              {/* Action buttons */}
+              <FormFields form={editForm} set={setEditForm as any} />
               <div className="pt-2 space-y-3">
                 <button type="submit" disabled={editSaving}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2">
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors">
                   {editSaving ? 'Saving…' : '✓ Save Changes'}
                 </button>
-
-                {/* Delete section */}
                 {!deleteConfirm ? (
                   <button type="button" onClick={()=>setDeleteConfirm(true)}
                     className="w-full py-2.5 border border-red-200 text-red-500 hover:bg-red-50 font-medium rounded-xl transition-colors text-sm">
@@ -347,16 +345,12 @@ export default function CustomersPage() {
                   </button>
                 ) : (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-red-700 mb-3">Delete {editing.first_name} {editing.last_name}? This cannot be undone.</p>
+                    <p className="text-sm font-semibold text-red-700 mb-3">Delete {editing.first_name} {editing.last_name}? Cannot be undone.</p>
                     <div className="flex gap-2">
                       <button type="button" onClick={handleDelete}
-                        className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm transition-colors">
-                        Yes, Delete
-                      </button>
+                        className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg text-sm">Yes, Delete</button>
                       <button type="button" onClick={()=>setDeleteConfirm(false)}
-                        className="flex-1 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium rounded-lg text-sm transition-colors">
-                        Cancel
-      </button>
+                        className="flex-1 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium rounded-lg text-sm">Cancel</button>
                     </div>
                   </div>
                 )}
