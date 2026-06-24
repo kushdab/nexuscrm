@@ -18,5 +18,7 @@ class Contact(Base, TimestampMixin):
     title      = Column(String(100))
     notes      = Column(Text)
     stage      = Column(String(50), default="lead")
+    city       = Column(String(100))
     state      = Column(String(100))
     country    = Column(String(100))
+    zip_code   = Column(String(20))
