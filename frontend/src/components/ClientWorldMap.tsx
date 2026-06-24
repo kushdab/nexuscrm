@@ -7,128 +7,122 @@ import {
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 const API = process.env.NEXT_PUBLIC_API_URL || ''
 
-// ── Coordinate lookup ──────────────────────────────────────────────────────────
-// US states (full name or abbreviation) → [lng, lat]
-const US_STATES: Record<string, [number, number]> = {
-  'alabama':'AL','alaska':'AK','arizona':'AZ','arkansas':'AR','california':'CA',
-  'colorado':'CO','connecticut':'CT','delaware':'DE','florida':'FL','georgia':'GA',
-  'hawaii':'HI','idaho':'ID','illinois':'IL','indiana':'IN','iowa':'IA',
-  'kansas':'KS','kentucky':'KY','louisiana':'LA','maine':'ME','maryland':'MD',
-  'massachusetts':'MA','michigan':'MI','minnesota':'MN','mississippi':'MS','missouri':'MO',
-  'montana':'MT','nebraska':'NE','nevada':'NV','new hampshire':'NH','new jersey':'NJ',
-  'new mexico':'NM','new york':'NY','north carolina':'NC','north dakota':'ND','ohio':'OH',
-  'oklahoma':'OK','oregon':'OR','pennsylvania':'PA','rhode island':'RI','south carolina':'SC',
-  'south dakota':'SD','tennessee':'TN','texas':'TX','utah':'UT','vermont':'VT',
-  'virginia':'VA','washington':'WA','west virginia':'WV','wisconsin':'WI','wyoming':'WY',
-  'dc':'DC','district of columbia':'DC',
-} as any
-
+// ── Coordinate lookup ────────────────────────────────────────────────────────
+// US state abbreviations + full names → [lng, lat]
 const STATE_COORDS: Record<string, [number, number]> = {
-  AL:[-86.7911,32.7990],AK:[-153.3691,66.1605],AZ:[-111.4312,34.2744],
-  AR:[-92.4426,34.8938],CA:[-119.4179,36.7783],CO:[-105.5478,38.9972],
-  CT:[-72.7273,41.6219],DE:[-75.5277,38.9896],FL:[-81.5158,27.7663],
-  GA:[-83.4426,32.1656],HI:[-155.5828,19.8968],ID:[-114.7420,44.3509],
-  IL:[-88.9862,40.3495],IN:[-86.2583,39.8494],IA:[-93.2105,42.0046],
-  KS:[-98.4842,38.5266],KY:[-84.2700,37.6681],LA:[-91.9623,31.1695],
-  ME:[-69.3819,44.6939],MD:[-76.8021,39.0639],MA:[-71.5301,42.2302],
-  MI:[-84.5361,43.3266],MN:[-93.9002,45.6945],MS:[-89.6787,32.7416],
-  MO:[-92.2884,38.4561],MT:[-110.3626,46.8797],NE:[-99.9018,41.4925],
-  NV:[-117.0554,38.3135],NH:[-71.5639,43.1939],NJ:[-74.4057,40.2989],
-  NM:[-106.2371,34.5400],NY:[-74.9481,42.1657],NC:[-79.8060,35.6301],
-  ND:[-99.7840,47.5289],OH:[-82.9071,40.4173],OK:[-96.9247,35.5653],
-  OR:[-120.5583,44.5720],PA:[-77.2098,40.5908],RI:[-71.5118,41.6809],
-  SC:[-80.9450,33.8569],SD:[-99.4388,44.2998],TN:[-86.6923,35.7478],
-  TX:[-97.5635,31.0545],UT:[-111.0937,39.3210],VT:[-72.7107,44.0459],
-  VA:[-78.6569,37.7693],WA:[-120.5015,47.4009],WV:[-80.4549,38.4912],
-  WI:[-89.6165,44.2685],WY:[-107.2903,42.7560],DC:[-77.0369,38.9072],
+  AL:[-86.79,32.80],AK:[-153.37,64.20],AZ:[-111.09,34.05],AR:[-92.37,34.75],
+  CA:[-119.42,36.78],CO:[-105.55,39.11],CT:[-72.75,41.60],DE:[-75.50,39.16],
+  FL:[-81.52,27.66],GA:[-83.44,32.16],HI:[-155.65,19.90],ID:[-114.74,44.07],
+  IL:[-89.20,40.35],IN:[-86.13,39.85],IA:[-93.10,42.01],KS:[-98.38,38.53],
+  KY:[-84.27,37.67],LA:[-91.83,31.17],ME:[-69.44,44.69],MD:[-76.80,39.06],
+  MA:[-71.53,42.23],MI:[-84.54,43.33],MN:[-94.67,46.39],MS:[-89.40,32.74],
+  MO:[-92.29,38.46],MT:[-110.45,46.88],NE:[-98.27,41.49],NV:[-116.42,38.80],
+  NH:[-71.57,43.19],NJ:[-74.67,40.30],NM:[-106.25,34.84],NY:[-74.95,42.17],
+  NC:[-79.81,35.63],ND:[-99.78,47.53],OH:[-82.79,40.39],OK:[-97.09,35.57],
+  OR:[-120.55,43.93],PA:[-77.19,41.20],RI:[-71.48,41.68],SC:[-80.95,33.86],
+  SD:[-99.90,44.37],TN:[-86.69,35.86],TX:[-97.56,31.05],UT:[-111.09,39.32],
+  VT:[-72.71,44.05],VA:[-78.66,37.43],WA:[-120.74,47.75],WV:[-80.45,38.49],
+  WI:[-89.62,44.27],WY:[-107.55,43.08],DC:[-77.03,38.90],
+  // Full names
+  ALABAMA:[-86.79,32.80],ALASKA:[-153.37,64.20],ARIZONA:[-111.09,34.05],
+  ARKANSAS:[-92.37,34.75],CALIFORNIA:[-119.42,36.78],COLORADO:[-105.55,39.11],
+  CONNECTICUT:[-72.75,41.60],DELAWARE:[-75.50,39.16],FLORIDA:[-81.52,27.66],
+  GEORGIA:[-83.44,32.16],HAWAII:[-155.65,19.90],IDAHO:[-114.74,44.07],
+  ILLINOIS:[-89.20,40.35],INDIANA:[-86.13,39.85],IOWA:[-93.10,42.01],
+  KANSAS:[-98.38,38.53],KENTUCKY:[-84.27,37.67],LOUISIANA:[-91.83,31.17],
+  MAINE:[-69.44,44.69],MARYLAND:[-76.80,39.06],MASSACHUSETTS:[-71.53,42.23],
+  MICHIGAN:[-84.54,43.33],MINNESOTA:[-94.67,46.39],MISSISSIPPI:[-89.40,32.74],
+  MISSOURI:[-92.29,38.46],MONTANA:[-110.45,46.88],NEBRASKA:[-98.27,41.49],
+  NEVADA:[-116.42,38.80],'NEW HAMPSHIRE':[-71.57,43.19],'NEW JERSEY':[-74.67,40.30],
+  'NEW MEXICO':[-106.25,34.84],'NEW YORK':[-74.95,42.17],'NORTH CAROLINA':[-79.81,35.63],
+  'NORTH DAKOTA':[-99.78,47.53],OHIO:[-82.79,40.39],OKLAHOMA:[-97.09,35.57],
+  OREGON:[-120.55,43.93],PENNSYLVANIA:[-77.19,41.20],'RHODE ISLAND':[-71.48,41.68],
+  'SOUTH CAROLINA':[-80.95,33.86],'SOUTH DAKOTA':[-99.90,44.37],TENNESSEE:[-86.69,35.86],
+  TEXAS:[-97.56,31.05],UTAH:[-111.09,39.32],VERMONT:[-72.71,44.05],
+  VIRGINIA:[-78.66,37.43],WASHINGTON:[-120.74,47.75],'WEST VIRGINIA':[-80.45,38.49],
+  WISCONSIN:[-89.62,44.27],WYOMING:[-107.55,43.08],
 }
 
-// World country name → [lng, lat] (capitals / centroids)
+// Country centroids [lng, lat]
 const COUNTRY_COORDS: Record<string, [number, number]> = {
-  'united states':[-98.5795,39.8282],'usa':[-98.5795,39.8282],'us':[-98.5795,39.8282],
-  'canada':[-96.8165,56.1304],'mexico':[-102.5528,23.6345],
-  'united kingdom':[-3.4360,55.3781],'uk':[-3.4360,55.3781],'england':[-1.1743,52.3555],
-  'germany':[10.4515,51.1657],'france':[2.2137,46.2276],'italy':[12.5674,41.8719],
-  'spain':[-3.7038,40.4168],'netherlands':[5.2913,52.1326],'switzerland':[8.2275,46.8182],
-  'sweden':[18.6435,60.1282],'norway':[8.4689,60.4720],'denmark':[9.5018,56.2639],
-  'poland':[19.1451,51.9194],'ukraine':[31.1656,48.3794],
-  'australia':[133.7751,-25.2744],'new zealand':[174.8860,-40.9006],
-  'japan':[138.2529,36.2048],'china':[104.1954,35.8617],'india':[78.9629,20.5937],
-  'south korea':[127.7669,35.9078],'singapore':[103.8198,1.3521],
-  'brazil':[-51.9253,-14.2350],'argentina':[-63.6167,-38.4161],'colombia':[-74.2973,4.5709],
-  'south africa':[25.0820,-29.0000],'nigeria':[8.6753,9.0820],'kenya':[37.9062,-0.0236],
-  'ghana':[-1.0232,7.9465],'ethiopia':[40.4897,9.1450],'egypt':[30.8025,26.8206],
-  'uae':[53.8478,23.4241],'saudi arabia':[45.0792,23.8859],'israel':[34.8516,31.0461],
-  'turkey':[35.2433,38.9637],'russia':[105.3188,61.5240],
+  KENYA:[37.90,-1.29],NIGERIA:[8.67,9.08],SOUTHAFRICA:[25.08,-29.00],
+  ETHIOPIA:[40.49,9.14],GHANA:[-1.02,7.95],TANZANIA:[34.89,-6.37],
+  UGANDA:[32.29,1.37],RWANDA:[29.87,-1.94],SENEGAL:[-14.45,14.50],
+  EGYPT:[30.80,26.82],MOROCCO:[-7.09,31.79],ALGERIA:[2.63,28.03],
+  LIBYA:[17.23,26.34],TUNISIA:[9.56,33.89],SUDAN:[30.22,12.86],
+  UNITEDSTATES:[-98.58,39.83],USA:[-98.58,39.83],CANADA:[-96.80,60.07],
+  MEXICO:[-102.55,23.63],BRAZIL:[-47.86,-15.79],ARGENTINA:[-63.62,-38.42],
+  COLOMBIA:[-74.30,4.57],CHILE:[-71.54,-35.68],PERU:[-75.01,-9.19],
+  UNITEDKINGDOM:[-1.17,52.35],UK:[-1.17,52.35],FRANCE:[2.21,46.23],
+  GERMANY:[10.45,51.17],ITALY:[12.57,41.87],SPAIN:[-3.75,40.46],
+  PORTUGAL:[-8.22,39.40],NETHERLANDS:[5.29,52.13],BELGIUM:[4.47,50.50],
+  SWEDEN:[18.64,60.13],NORWAY:[8.47,60.47],DENMARK:[9.50,56.26],
+  FINLAND:[25.75,61.92],SWITZERLAND:[8.23,46.82],AUSTRIA:[14.55,47.52],
+  POLAND:[19.14,51.92],UKRAINE:[31.17,48.38],RUSSIA:[105.32,61.52],
+  CHINA:[104.20,35.86],JAPAN:[138.25,36.20],INDIA:[78.96,20.59],
+  INDONESIA:[113.92,-0.79],PAKISTAN:[69.35,30.38],BANGLADESH:[90.36,23.68],
+  VIETNAM:[108.28,14.06],THAILAND:[100.99,15.87],MYANMAR:[95.96,16.87],
+  PHILIPPINES:[121.77,12.88],MALAYSIA:[109.70,4.21],SINGAPORE:[103.82,1.35],
+  AUSTRALIA:[133.78,-25.27],NEWZEALAND:[172.97,-40.90],
+  SAUDIARABIA:[45.08,23.88],UAE:[53.85,23.42],QATAR:[51.18,25.35],
+  IRAN:[53.69,32.43],IRAQ:[43.68,33.22],TURKEY:[35.24,38.96],
+  ISRAEL:[34.85,31.05],JORDAN:[36.24,30.59],LEBANON:[35.50,33.87],
+  SOUTHKOREA:[127.77,35.91],NORTHKOREA:[127.51,40.34],
 }
 
-interface LocationPoint {
-  key: string
-  coordinates: [number, number]
-  count: number
-  label: string
-}
+interface LocationRow { city:string|null; state:string|null; country:string|null; count:number }
+interface MapPin { label:string; coords:[number,number]; count:number; key:string }
 
-interface MoveEndArgs { coordinates: [number, number]; zoom: number }
+const FALLBACK: MapPin[] = [{ label:'Utah', coords:[-111.09,39.32], count:0, key:'fallback' }]
 
-function resolveCoords(state?: string, country?: string): [number, number] | null {
-  if (state) {
-    const s = state.trim()
-    // Try direct abbreviation
-    if (STATE_COORDS[s.toUpperCase()]) return STATE_COORDS[s.toUpperCase()]
-    // Try full name → abbreviation
-    const abbr = US_STATES[s.toLowerCase()]
-    if (abbr && STATE_COORDS[abbr]) return STATE_COORDS[abbr]
+function resolveCoords(row: LocationRow): [number,number] | null {
+  // Try state first (more precise)
+  if (row.state) {
+    const k = row.state.trim().toUpperCase()
+    if (STATE_COORDS[k]) return STATE_COORDS[k]
   }
-  if (country) {
-    const c = country.trim().toLowerCase()
-    if (COUNTRY_COORDS[c]) return COUNTRY_COORDS[c]
-    // partial match
-    for (const k of Object.keys(COUNTRY_COORDS)) {
-      if (c.includes(k) || k.includes(c)) return COUNTRY_COORDS[k]
-    }
+  // Try country
+  if (row.country) {
+    const k = row.country.trim().toUpperCase().replace(/\s+/g,'')
+    if (COUNTRY_COORDS[k]) return COUNTRY_COORDS[k]
   }
   return null
 }
 
+interface MoveEndArgs { coordinates:[number,number]; zoom:number }
+
 export default function ClientWorldMap() {
-  const [zoom, setZoom]   = useState(1)
-  const [center, setCenter] = useState<[number, number]>([0, 20])
-  const [tooltip, setTooltip] = useState<{ label: string; count: number } | null>(null)
-  const [points, setPoints] = useState<LocationPoint[]>([])
+  const [zoom, setZoom]     = useState(1)
+  const [center, setCenter] = useState<[number,number]>([0, 20])
+  const [pins, setPins]     = useState<MapPin[]>(FALLBACK)
   const [loading, setLoading] = useState(true)
+  const [tooltip, setTooltip] = useState<{ label:string; count:number } | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('crm_token')
     if (!token) { setLoading(false); return }
-    fetch(`${API}/api/v1/contacts/locations`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/api/v1/contacts/locations`, { headers:{ Authorization:`Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
-      .then((data: { state?: string; country?: string; count: number }[]) => {
-        const map = new Map<string, LocationPoint>()
-        for (const row of data) {
-          const coords = resolveCoords(row.state, row.country)
-          if (!coords) continue
-          const key = coords.join(',')
-          const label = [row.state, row.country].filter(Boolean).join(', ')
-          if (map.has(key)) {
-            const p = map.get(key)!
-            p.count += row.count
-          } else {
-            map.set(key, { key, coordinates: coords, count: row.count, label })
-          }
-        }
-        const pts = Array.from(map.values())
-        setPoints(pts.length ? pts : [{ key:'default', coordinates:[-111.0937,39.3210], count:0, label:'Salt Lake City, UT' }])
+      .then((rows: LocationRow[]) => {
+        const mapped: MapPin[] = rows
+          .map(row => {
+            const coords = resolveCoords(row)
+            if (!coords) return null
+            const parts = [row.city, row.state, row.country].filter(Boolean)
+            return { label: parts.join(', '), coords, count: row.count, key: parts.join('-') }
+          })
+          .filter((p): p is MapPin => p !== null)
+        setPins(mapped.length > 0 ? mapped : FALLBACK)
       })
-      .catch(() => setPoints([{ key:'default', coordinates:[-111.0937,39.3210], count:0, label:'Salt Lake City, UT' }]))
+      .catch(() => setPins(FALLBACK))
       .finally(() => setLoading(false))
   }, [])
 
-  const handleMoveEnd = useCallback(({ coordinates, zoom }: MoveEndArgs) => {
+  const handleMoveEnd = useCallback(({ coordinates, zoom }:MoveEndArgs) => {
     setCenter(coordinates); setZoom(zoom)
   }, [])
 
-  const totalClients = points.reduce((s, p) => s + p.count, 0)
+  const totalCustomers = pins === FALLBACK ? 0 : pins.reduce((s,p)=>s+p.count,0)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -136,7 +130,9 @@ export default function ClientWorldMap() {
         <div>
           <h3 className="text-base font-semibold text-gray-800">Customer Locations</h3>
           <p className="text-xs text-gray-400 mt-0.5">
-            {loading ? 'Loading…' : `${points.length} region${points.length!==1?'s':''} · ${totalClients} customer${totalClients!==1?'s':''}`}
+            {loading ? 'Loading…' : pins === FALLBACK
+              ? 'No location data yet — add city/state/country to customers'
+              : `${pins.length} region${pins.length!==1?'s':''} · ${totalCustomers} customer${totalCustomers!==1?'s':''}`}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -149,9 +145,9 @@ export default function ClientWorldMap() {
         </div>
       </div>
 
-      <div className="relative bg-[#e8f0f7]" style={{ height: 340 }}>
+      <div className="relative bg-[#e8f0f7]" style={{ height:340 }}>
         <ComposableMap projection="geoMercator"
-          projectionConfig={{ scale: 140, center: [0, 20] }}
+          projectionConfig={{ scale:140, center:[0,20] }}
           style={{ width:'100%', height:'100%' }}>
           <ZoomableGroup zoom={zoom} center={center} onMoveEnd={handleMoveEnd} minZoom={0.8} maxZoom={12}>
             <Geographies geography={GEO_URL}>
@@ -161,17 +157,15 @@ export default function ClientWorldMap() {
                   style={{ default:{outline:'none'}, hover:{fill:'#b8cde0',outline:'none'}, pressed:{outline:'none'} }} />
               ))}
             </Geographies>
-
-            {points.map(loc => (
-              <Marker key={loc.key} coordinates={loc.coordinates}
-                onMouseEnter={() => setTooltip({ label: loc.label, count: loc.count })}
+            {pins.map(pin => (
+              <Marker key={pin.key} coordinates={pin.coords}
+                onMouseEnter={() => setTooltip({ label:pin.label, count:pin.count })}
                 onMouseLeave={() => setTooltip(null)}>
                 <circle r={14/zoom} fill="#ef4444" fillOpacity={0.15} stroke="none" />
                 <circle r={7/zoom} fill="#ef4444" stroke="#ffffff" strokeWidth={2/zoom} style={{ cursor:'pointer' }} />
                 <text textAnchor="middle" y={-(13/zoom)}
-                  style={{ fontSize: Math.max(9,11/zoom), fontWeight:700, fill:'#111827',
-                    pointerEvents:'none', textShadow:'0 1px 2px rgba(255,255,255,0.9)' }}>
-                  {loc.label.split(',')[0]}
+                  style={{ fontSize:Math.max(9,11/zoom), fontWeight:700, fill:'#111827', pointerEvents:'none', textShadow:'0 1px 2px rgba(255,255,255,0.9)' }}>
+                  {pin.label.split(',')[0]}
                 </text>
               </Marker>
             ))}
@@ -181,7 +175,7 @@ export default function ClientWorldMap() {
         {tooltip && (
           <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg border border-gray-200 px-4 py-3 pointer-events-none">
             <p className="text-sm font-semibold text-gray-800">{tooltip.label}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{tooltip.count} customer{tooltip.count!==1?'s':''}</p>
+            {tooltip.count > 0 && <p className="text-xs text-gray-500 mt-0.5">{tooltip.count} customer{tooltip.count!==1?'s':''}</p>}
           </div>
         )}
         <div className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-gray-200">
@@ -189,18 +183,15 @@ export default function ClientWorldMap() {
         </div>
       </div>
 
-      {points.length > 0 && (
+      {pins !== FALLBACK && pins.length > 0 && (
         <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-3">
-          {points.slice(0,8).map(loc => (
-            <div key={loc.key} className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-              <span className="text-xs text-gray-600">{loc.label}</span>
-              {loc.count > 0 && (
-                <span className="text-xs bg-red-50 text-red-600 font-semibold px-1.5 py-0.5 rounded-full">{loc.count}</span>
-              )}
+          {pins.slice(0,8).map(pin => (
+            <div key={pin.key} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm flex-shrink-0" />
+              <span className="text-sm text-gray-600">{pin.label}</span>
+              <span className="text-xs bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">{pin.count}</span>
             </div>
           ))}
-          {points.length > 8 && <span className="text-xs text-gray-400">+{points.length-8} more</span>}
         </div>
       )}
     </div>
