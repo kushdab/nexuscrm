@@ -1,346 +1,213 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
-} from 'recharts'
+import { useEffect, useState, useCallback } from 'react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || ''
+const QUARTERS = ['Q1','Q2','Q3','Q4']
+const Q_MONTHS: Record<string,[number,number,number]> = { Q1:[1,2,3], Q2:[4,5,6], Q3:[7,8,9], Q4:[10,11,12] }
+const MONTH_NAMES = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
-interface Contact { id:string; first_name:string; last_name:string; email:string; company:string; stage:string; created_at:string }
-interface Deal    { id:string; title:string; value:number; stage:string; created_at:string }
-
-const QUARTERS = [
-  { label: 'Q1', months: [0,1,2],  name: 'January – March'   },
-  { label: 'Q2', months: [3,4,5],  name: 'April – June'      },
-  { label: 'Q3', months: [6,7,8],  name: 'July – September'  },
-  { label: 'Q4', months: [9,10,11],name: 'October – December' },
-]
-
-const STAGE_COLORS: Record<string,string> = {
-  lead:'#3b82f6',prospect:'#6366f1',qualified:'#f59e0b',
-  proposal:'#f97316',negotiation:'#8b5cf6',
-  closed_won:'#10b981',closed_lost:'#ef4444',
+const STAGE_COLOR: Record<string,string> = {
+  lead:'bg-blue-500', qualified:'bg-yellow-500', proposal:'bg-orange-500',
+  negotiation:'bg-purple-500', closed_won:'bg-green-500', closed_lost:'bg-red-500',
 }
 
-function Metric({ label, value, sub, color }: { label:string; value:string|number; sub?:string; color?:string }) {
-  return (
-    <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm relative overflow-hidden print:shadow-none print:border-gray-300">
-      <div className="absolute left-0 top-0 h-full w-1 rounded-l-xl" style={{ background: color||'#3b82f6' }} />
-      <p className="text-xs text-gray-400 uppercase tracking-wider pl-3">{label}</p>
-      <p className="text-2xl font-extrabold text-gray-900 pl-3 mt-1">{value}</p>
-      {sub && <p className="text-xs text-gray-400 pl-3 mt-0.5">{sub}</p>}
-    </div>
-  )
+interface Deal   { id:string; value:number; stage:string; created_at:string; close_date?:string; title:string }
+interface Contact{ id:string; created_at:string; first_name:string; last_name:string; company:string }
+
+function inQ(dateStr:string, year:number, months:[number,number,number]) {
+  if (!dateStr) return false
+  const d = new Date(dateStr); return d.getFullYear()===year && months.includes(d.getMonth()+1)
 }
 
 export default function ReportsPage() {
-  const router = useRouter()
-  const printRef = useRef<HTMLDivElement>(null)
-  const today  = new Date()
-  const curQ   = Math.floor(today.getMonth() / 3)
-
-  const [year,    setYear]    = useState(today.getFullYear())
-  const [quarter, setQuarter] = useState(curQ)
-  const [contacts,setContacts]= useState<Contact[]>([])
-  const [deals,   setDeals]   = useState<Deal[]>([])
+  const now    = new Date()
+  const [year, setYear]       = useState(now.getFullYear())
+  const [quarter, setQuarter] = useState(`Q${Math.ceil((now.getMonth()+1)/3)}`)
+  const [deals, setDeals]     = useState<Deal[]>([])
+  const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
-  const [org,     setOrg]     = useState('')
 
   const load = useCallback(async () => {
-    const token = localStorage.getItem('crm_token')
-    if (!token) { router.push('/login'); return }
-    const h = { Authorization: `Bearer ${token}` }
+    const token = localStorage.getItem('crm_token'); if (!token) return
     setLoading(true)
-    try {
-      const [cr, dr, ur] = await Promise.all([
-        fetch(`${API}/api/v1/contacts?limit=1000`, { headers: h }),
-        fetch(`${API}/api/v1/deals?limit=1000`,    { headers: h }),
-        fetch(`${API}/api/v1/users/me`,             { headers: h }),
-      ])
-      const [cd, dd, ud] = await Promise.all([cr.json(), dr.json(), ur.json()])
-      setContacts(cd.items || [])
-      setDeals(dd.items || [])
-      setOrg(ud.org_name || ud.organization?.name || '')
-    } finally { setLoading(false) }
-  }, [router])
+    const [dr, cr] = await Promise.all([
+      fetch(`${API}/api/v1/deals?limit=1000`,    { headers:{ Authorization:`Bearer ${token}` } }),
+      fetch(`${API}/api/v1/contacts?limit=1000`, { headers:{ Authorization:`Bearer ${token}` } }),
+    ])
+    if (dr.ok) { const d=await dr.json(); setDeals(d.items||[]) }
+    if (cr.ok) { const d=await cr.json(); setContacts(d.items||[]) }
+    setLoading(false)
+  }, [])
+  useEffect(()=>{ load() },[load])
 
-  useEffect(() => { load() }, [load])
+  const months = Q_MONTHS[quarter]
+  const prevQ  = quarter==='Q1'?'Q4':QUARTERS[QUARTERS.indexOf(quarter)-1]
+  const prevY  = quarter==='Q1'?year-1:year
+  const prevMs = Q_MONTHS[prevQ]
 
-  // ── Quarter date range ──────────────────────────────────────────────────
-  const q = QUARTERS[quarter]
-  const qStart = new Date(year, q.months[0], 1)
-  const qEnd   = new Date(year, q.months[2] + 1, 0, 23, 59, 59)
-  const inQ    = (d: string) => { const t = new Date(d); return t >= qStart && t <= qEnd }
+  // Current quarter metrics
+  const qDeals    = deals.filter(d=>inQ(d.created_at,year,months))
+  const qContacts = contacts.filter(c=>inQ(c.created_at,year,months))
+  const qRevenue  = qDeals.filter(d=>d.stage==='closed_won').reduce((s,d)=>s+(d.value||0),0)
+  const qPipeline = qDeals.filter(d=>d.stage!=='closed_lost').reduce((s,d)=>s+(d.value||0),0)
+  const qWinRate  = qDeals.length ? Math.round(qDeals.filter(d=>d.stage==='closed_won').length/qDeals.length*100) : 0
+  const qAvgDeal  = qDeals.length ? Math.round(qDeals.reduce((s,d)=>s+(d.value||0),0)/qDeals.length) : 0
 
-  // ── Previous quarter comparison ─────────────────────────────────────────
-  const prevQi = (quarter - 1 + 4) % 4
-  const prevY  = quarter === 0 ? year - 1 : year
-  const pq     = QUARTERS[prevQi]
-  const pStart = new Date(prevY, pq.months[0], 1)
-  const pEnd   = new Date(prevY, pq.months[2] + 1, 0, 23, 59, 59)
-  const inPQ   = (d: string) => { const t = new Date(d); return t >= pStart && t <= pEnd }
+  // Prev quarter metrics for % change
+  const pDeals    = deals.filter(d=>inQ(d.created_at,prevY,prevMs))
+  const pContacts = contacts.filter(c=>inQ(c.created_at,prevY,prevMs))
+  const pRevenue  = pDeals.filter(d=>d.stage==='closed_won').reduce((s,d)=>s+(d.value||0),0)
+  const pPipeline = pDeals.filter(d=>d.stage!=='closed_lost').reduce((s,d)=>s+(d.value||0),0)
+  const pWinRate  = pDeals.length ? Math.round(pDeals.filter(d=>d.stage==='closed_won').length/pDeals.length*100) : 0
 
-  // ── Compute metrics ─────────────────────────────────────────────────────
-  const qContacts   = contacts.filter(c => inQ(c.created_at))
-  const qDeals      = deals.filter(d => inQ(d.created_at))
-  const pContacts   = contacts.filter(c => inPQ(c.created_at))
-  const pDeals      = deals.filter(d => inPQ(d.created_at))
-
-  const qClosedWon  = qDeals.filter(d => d.stage === 'closed_won')
-  const qClosedLost = qDeals.filter(d => d.stage === 'closed_lost')
-  const pClosedWon  = pDeals.filter(d => d.stage === 'closed_won')
-
-  const qRevenue    = qClosedWon.reduce((s,d) => s+(d.value||0), 0)
-  const pRevenue    = pClosedWon.reduce((s,d) => s+(d.value||0), 0)
-  const qPipeline   = qDeals.filter(d => !['closed_won','closed_lost'].includes(d.stage))
-                             .reduce((s,d) => s+(d.value||0), 0)
-  const qWinRate    = (qClosedWon.length + qClosedLost.length) > 0
-    ? (qClosedWon.length / (qClosedWon.length + qClosedLost.length)) * 100 : 0
-  const qAvgDeal    = qDeals.length ? qDeals.reduce((s,d) => s+(d.value||0),0) / qDeals.length : 0
-
-  const delta = (curr: number, prev: number) => {
-    if (!prev) return null
-    const d = ((curr - prev) / prev) * 100
-    return { val: d, fmt: `${d >= 0 ? '+' : ''}${d.toFixed(1)}%`, up: d >= 0 }
+  function pct(curr:number, prev:number) {
+    if (!prev) return curr>0 ? '+∞%' : '—'
+    const p = Math.round((curr-prev)/prev*100)
+    return (p>=0?'+':'')+p+'%'
   }
-  const revDelta  = delta(qRevenue, pRevenue)
-  const contDelta = delta(qContacts.length, pContacts.length)
+  function pctClass(curr:number, prev:number) {
+    if (!prev) return 'text-slate-500'
+    return curr>=prev ? 'text-green-600' : 'text-red-500'
+  }
 
-  // ── Monthly breakdown within quarter ───────────────────────────────────
-  const monthlyBreakdown = q.months.map(m => {
-    const ms = new Date(year, m, 1)
-    const me = new Date(year, m + 1, 0, 23, 59, 59)
-    const inM = (d: string) => { const t = new Date(d); return t >= ms && t <= me }
-    const md = deals.filter(d => inM(d.created_at))
-    return {
-      name: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m],
-      Revenue:  md.filter(d => d.stage==='closed_won').reduce((s,d) => s+(d.value||0),0),
-      Pipeline: md.filter(d => !['closed_won','closed_lost'].includes(d.stage)).reduce((s,d) => s+(d.value||0),0),
-      Deals:    md.length,
-    }
-  })
+  // Monthly breakdown within quarter
+  const monthlyData = months.map(m => ({
+    month: MONTH_NAMES[m],
+    revenue: deals.filter(d=>inQ(d.created_at,year,[m,m,m]) && d.stage==='closed_won').reduce((s,d)=>s+(d.value||0),0),
+    pipeline: deals.filter(d=>inQ(d.created_at,year,[m,m,m]) && d.stage!=='closed_lost').reduce((s,d)=>s+(d.value||0),0),
+    count: deals.filter(d=>inQ(d.created_at,year,[m,m,m])).length,
+  }))
 
-  // ── Stage distribution ─────────────────────────────────────────────────
-  const stageDist = Object.entries(
-    qDeals.reduce((acc, d) => { acc[d.stage]=(acc[d.stage]||0)+1; return acc }, {} as Record<string,number>)
-  ).map(([stage, count]) => ({ stage, count, pct: qDeals.length ? Math.round(count/qDeals.length*100) : 0 }))
-   .sort((a,b) => b.count - a.count)
+  // Stage breakdown
+  const stageCounts = Object.fromEntries(['lead','qualified','proposal','negotiation','closed_won','closed_lost'].map(s=>[
+    s, qDeals.filter(d=>d.stage===s).length
+  ]))
 
-  const fmt = (n: number) => n >= 1_000_000 ? `$${(n/1_000_000).toFixed(2)}M`
-    : n >= 1_000 ? `$${(n/1_000).toFixed(1)}K` : `$${n.toFixed(0)}`
+  const kpis = [
+    { label:'Revenue', value:`$${qRevenue.toLocaleString()}`, prev:pRevenue, curr:qRevenue, fmt:'$' },
+    { label:'New Contacts', value:String(qContacts.length), prev:pContacts.length, curr:qContacts.length, fmt:'' },
+    { label:'Deals Created', value:String(qDeals.length), prev:pDeals.length, curr:qDeals.length, fmt:'' },
+    { label:'Win Rate', value:`${qWinRate}%`, prev:pWinRate, curr:qWinRate, fmt:'%' },
+    { label:'Pipeline', value:`$${qPipeline.toLocaleString()}`, prev:pPipeline, curr:qPipeline, fmt:'$' },
+    { label:'Avg Deal Size', value:`$${qAvgDeal.toLocaleString()}`, prev:0, curr:qAvgDeal, fmt:'$' },
+  ]
 
-  function handlePrint() { window.print() }
-
-  const years = [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]
-
-  if (loading) return <div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>
+  const maxBar = Math.max(...monthlyData.map(m=>m.pipeline), 1)
 
   return (
-    <>
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { background: white; }
-          .print-page { padding: 0; }
-        }
-      `}</style>
-
-      <div className="space-y-6 print-page">
-        {/* Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Generate and export quarterly business reports</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <select value={year} onChange={e => setYear(Number(e.target.value))}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              {years.map(y => <option key={y}>{y}</option>)}
-            </select>
-            {QUARTERS.map((qq, i) => (
-              <button key={qq.label} onClick={() => setQuarter(i)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all
-                  ${quarter === i
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300'}`}>
-                {qq.label}
-              </button>
-            ))}
-            <button onClick={handlePrint}
-              className="px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
-              ⬇ Export PDF
-            </button>
-          </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Quarterly Reports</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{quarter} {year} vs {prevQ} {prevY}</p>
         </div>
-
-        {/* Report card */}
-        <div ref={printRef} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden print:rounded-none print:shadow-none print:border-none">
-
-          {/* Report header */}
-          <div className="bg-gradient-to-r from-[#111827] to-[#1e3a5f] px-8 py-6 text-white">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-blue-300 text-sm font-semibold uppercase tracking-widest">Quarterly Business Report</p>
-                <h2 className="text-3xl font-extrabold mt-1">
-                  {q.label} {year} &nbsp;·&nbsp; <span className="text-blue-300">{q.name}</span>
-                </h2>
-                <p className="text-white/60 text-sm mt-2">
-                  Period: {qStart.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})} –{' '}
-                  {qEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-extrabold text-white">Nexus<span className="text-blue-400">CRM</span></p>
-                {org && <p className="text-white/60 text-sm mt-1">{org}</p>}
-                <p className="text-white/40 text-xs mt-1">
-                  Generated {today.toLocaleDateString('en-US',{ month:'long', day:'numeric', year:'numeric' })}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-8 space-y-8">
-            {/* Executive summary */}
-            <section>
-              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Executive Summary</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Metric label="Revenue"       value={fmt(qRevenue)}
-                  sub={revDelta ? `${revDelta.fmt} vs prev quarter` : 'No prev data'} color="#10b981" />
-                <Metric label="New Contacts"  value={qContacts.length}
-                  sub={contDelta ? `${contDelta.fmt} vs prev quarter` : undefined} color="#3b82f6" />
-                <Metric label="Deals Created" value={qDeals.length}
-                  sub={`${qClosedWon.length} closed won`} color="#f59e0b" />
-                <Metric label="Win Rate"      value={`${qWinRate.toFixed(1)}%`}
-                  sub={`${qClosedLost.length} closed lost`} color="#8b5cf6" />
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
-                <Metric label="Pipeline Value" value={fmt(qPipeline)}  sub="Open deals" color="#6366f1" />
-                <Metric label="Avg Deal Size"  value={fmt(qAvgDeal)}   sub="All deals"  color="#f97316" />
-                <Metric label="Total Deals"    value={qDeals.length}   sub={`${qDeals.filter(d=>d.stage==='closed_won').length} won · ${qDeals.filter(d=>d.stage==='closed_lost').length} lost`} color="#ef4444" />
-              </div>
-            </section>
-
-            {/* Monthly breakdown chart */}
-            <section>
-              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Monthly Breakdown</h3>
-              <div className="bg-gray-50 rounded-xl p-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={monthlyBreakdown} barCategoryGap="35%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false}
-                      tickFormatter={v => v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,.1)', fontSize: 12 }}
-                      formatter={(v: number) => [`$${v.toLocaleString()}`, undefined]} />
-                    <Bar dataKey="Pipeline" fill="#dbeafe" radius={[4,4,0,0]} />
-                    <Bar dataKey="Revenue"  fill="#3b82f6" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            {/* Stage distribution */}
-            {stageDist.length > 0 && (
-              <section>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Deal Stage Distribution</h3>
-                <div className="space-y-3">
-                  {stageDist.map(({ stage, count, pct }) => (
-                    <div key={stage} className="flex items-center gap-4">
-                      <span className="w-28 text-xs font-medium text-gray-600 capitalize">{stage.replace('_',' ')}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{ width: `${pct}%`, background: STAGE_COLORS[stage]||'#94a3b8' }} />
-                      </div>
-                      <span className="w-12 text-right text-xs font-semibold text-gray-700">{pct}%</span>
-                      <span className="w-8 text-right text-xs text-gray-400">{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Top deals table */}
-            {qDeals.length > 0 && (
-              <section>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Top Deals This Quarter</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-xs text-gray-400 uppercase tracking-wider">
-                        <th className="py-2 text-left">Deal</th>
-                        <th className="py-2 text-left">Stage</th>
-                        <th className="py-2 text-right">Value</th>
-                        <th className="py-2 text-right">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {[...qDeals].sort((a,b) => (b.value||0)-(a.value||0)).slice(0,10).map(d => (
-                        <tr key={d.id}>
-                          <td className="py-2.5 font-medium text-gray-800">{d.title}</td>
-                          <td className="py-2.5">
-                            <span className="text-xs px-2 py-0.5 rounded-full font-semibold capitalize"
-                              style={{ background:(STAGE_COLORS[d.stage]||'#94a3b8')+'20', color:STAGE_COLORS[d.stage]||'#64748b' }}>
-                              {d.stage.replace('_',' ')}
-                            </span>
-                          </td>
-                          <td className="py-2.5 text-right font-semibold text-gray-900">${(d.value||0).toLocaleString()}</td>
-                          <td className="py-2.5 text-right text-xs text-gray-400">
-                            {new Date(d.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
-            {/* New contacts table */}
-            {qContacts.length > 0 && (
-              <section>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">New Contacts This Quarter</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-xs text-gray-400 uppercase tracking-wider">
-                        <th className="py-2 text-left">Name</th>
-                        <th className="py-2 text-left">Company</th>
-                        <th className="py-2 text-left">Stage</th>
-                        <th className="py-2 text-right">Added</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {qContacts.slice(0,10).map(c => (
-                        <tr key={c.id}>
-                          <td className="py-2.5 font-medium text-gray-800">{c.first_name} {c.last_name}</td>
-                          <td className="py-2.5 text-gray-500">{c.company}</td>
-                          <td className="py-2.5">
-                            <span className="text-xs px-2 py-0.5 rounded-full font-semibold capitalize"
-                              style={{ background:(STAGE_COLORS[c.stage]||'#94a3b8')+'20', color:STAGE_COLORS[c.stage]||'#64748b' }}>
-                              {c.stage}
-                            </span>
-                          </td>
-                          <td className="py-2.5 text-right text-xs text-gray-400">
-                            {new Date(c.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
-            {/* Footer */}
-            <div className="border-t border-gray-100 pt-4 flex items-center justify-between text-xs text-gray-400">
-              <span>NexusCRM Quarterly Report · {q.label} {year}</span>
-              <span>Confidential — for internal use only</span>
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <select value={year} onChange={e=>setYear(Number(e.target.value))}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {[year-1,year,year+1].map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+          {QUARTERS.map(q=>(
+            <button key={q} onClick={()=>setQuarter(q)}
+              className={`px-4 py-2 text-sm font-bold rounded-xl border transition-colors ${quarter===q?'bg-blue-600 text-white border-blue-600 shadow-md':'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+              {q}
+            </button>
+          ))}
+          <button onClick={()=>window.print()}
+            className="px-4 py-2 text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors shadow-sm">
+            ↓ Export PDF
+          </button>
         </div>
       </div>
-    </>
+
+      {loading ? (
+        <div className="text-center py-16 text-slate-400">Loading…</div>
+      ) : (
+        <>
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+            {kpis.map(k=>(
+              <div key={k.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                <p className="text-xs text-slate-500 font-medium mb-1">{k.label}</p>
+                <p className="text-xl sm:text-2xl font-extrabold text-slate-900">{k.value}</p>
+                <p className={`text-xs font-semibold mt-1 ${pctClass(k.curr,k.prev)}`}>
+                  {pct(k.curr,k.prev)} vs prev quarter
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Monthly bar chart */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
+            <h3 className="text-base font-bold text-slate-800 mb-5">Monthly Breakdown</h3>
+            <div className="grid grid-cols-3 gap-4">
+              {monthlyData.map(m=>(
+                <div key={m.month}>
+                  <p className="text-xs font-semibold text-slate-500 mb-2 text-center">{m.month}</p>
+                  <div className="flex flex-col gap-1.5">
+                    {/* Pipeline bar */}
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                      <div className="bg-blue-400 h-3 rounded-full transition-all duration-500"
+                        style={{width:`${Math.round(m.pipeline/maxBar*100)}%`}} />
+                    </div>
+                    {/* Revenue bar */}
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                      <div className="bg-blue-700 h-3 rounded-full transition-all duration-500"
+                        style={{width:`${Math.round(m.revenue/maxBar*100)}%`}} />
+                    </div>
+                  </div>
+                  <div className="mt-2 text-center">
+                    <p className="text-xs text-slate-500">{m.count} deals</p>
+                    <p className="text-sm font-bold text-slate-800">${m.revenue.toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-5 mt-4 pt-4 border-t border-slate-100">
+              <span className="flex items-center gap-2 text-xs text-slate-500"><span className="w-3 h-3 rounded-full bg-blue-400 inline-block"/>Pipeline</span>
+              <span className="flex items-center gap-2 text-xs text-slate-500"><span className="w-3 h-3 rounded-full bg-blue-700 inline-block"/>Revenue</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* Stage breakdown */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+              <h3 className="text-base font-bold text-slate-800 mb-4">Stage Distribution</h3>
+              <div className="space-y-3">
+                {Object.entries(stageCounts).map(([s,count])=>{
+                  const pct = qDeals.length ? Math.round(count/qDeals.length*100) : 0
+                  return (
+                    <div key={s}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium text-slate-700 capitalize">{s.replace('_',' ')}</span>
+                        <span className="text-slate-500">{count} · {pct}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2.5">
+                        <div className={`${STAGE_COLOR[s]||'bg-slate-400'} h-2.5 rounded-full transition-all duration-700`}
+                          style={{width:`${pct}%`}} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Top deals */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+              <h3 className="text-base font-bold text-slate-800 mb-4">Top Deals This Quarter</h3>
+              <div className="space-y-2">
+                {qDeals.sort((a,b)=>(b.value||0)-(a.value||0)).slice(0,6).map(d=>(
+                  <div key={d.id} className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-slate-700 truncate">{d.title}</p>
+                    <p className="text-sm font-bold text-slate-900 flex-shrink-0">${(d.value||0).toLocaleString()}</p>
+                  </div>
+                ))}
+                {qDeals.length===0 && <p className="text-sm text-slate-400">No deals this quarter.</p>}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
