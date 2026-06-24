@@ -7,7 +7,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || ''
 
 const NAV = [
   { href: '/dashboard',            icon: '⬛', label: 'Overview'    },
-  { href: '/dashboard/contacts',   icon: '👤', label: 'Contacts'    },
+  { href: '/dashboard/customers',  icon: '👥', label: 'Customers'   },
   { href: '/dashboard/deals',      icon: '💼', label: 'Deals'       },
   { href: '/dashboard/marketing',  icon: '📣', label: 'Marketing'   },
   { href: '/dashboard/reports',    icon: '📊', label: 'Reports'     },
